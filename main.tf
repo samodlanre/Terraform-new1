@@ -10,6 +10,7 @@ variable env_prefix {}
 variable my_ip {}
 variable instance_type {}
 variable "my_public_key_location" {}
+variable "private_key_location" {}
 
 resource "aws_vpc" "myapp-vpc" {
   cidr_block = var.vpc_cidr_block
@@ -131,9 +132,61 @@ resource "aws_instance" "myapp-server" {
   associate_public_ip_address = true
   key_name = aws_key_pair.ssh-key.key_name
 
-  user_data = file("entry-script.sh")
+  #user_data = file("entry-script.sh")
 
 user_data_replace_on_change = true
+#for terraform to enter the server , to run the commands , there must be a connection
+connection {
+  type = "ssh"
+  host = self.public_ip
+  user = "ec2-user"
+  private_key = file(var.private_key_location)
+}
+
+#File provisioner is used to copy files or directories form local to newly created resource
+#source - source file or folder
+#destination - absolute path
+provisioner "file" {
+  source = "entry-script.sh"
+  destination = "/home/ec2-user/entry-script-on-ec2.sh"
+  
+}
+
+
+# remote-exec gets into the server to run the inline commands
+provisioner "remote-exec" {
+  script = "entry-script.sh"
+  
+}
+/*
+Provisioners are not recommended
+-Use user_data if available
+- Breaks idempotency concept
+-TF doesn't know what you execute
+-Breaks current-desired state
+
+Alternative to remote-exec
+- Use configuration management tools (puppet, Ansible, CHEF)
+- Once server provisioned, hand over to those tools
+
+Alternative to local-exec
+-Use "local" provider
+
+Alternatives
+- Execute scripts separate from Terraform
+- From CI/CD tool
+
+
+
+
+*/
+
+#local-exec provisioner invokes a local executables after a resource is created
+#locally, NOT on the created resource!
+provisioner "local-exec" {
+  command = "echo ${self.public_ip} > output.txt"
+}
+
 tags = {
     Name: "${var.env_prefix}-server"
     foo = "bar"
